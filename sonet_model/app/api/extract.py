@@ -32,11 +32,7 @@ async def start_extract(
     if not settings.credentials_ok:
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Google credentials are not configured. Set GCP_PROJECT_ID, "
-                "DOCAI_PROCESSOR_ID, and GOOGLE_APPLICATION_CREDENTIALS in .env, "
-                "and place the service-account JSON in credentials/."
-            ),
+            detail="Anthropic credentials are not configured. Set ANTHROPIC_API_KEY in sonet_model/.env",
         )
 
     job_id = uuid.uuid4().hex
@@ -95,7 +91,7 @@ def get_json(job_id: str):
     if record is None:
         raise HTTPException(status_code=404, detail="Job not found")
     path = store.result_json(job_id)
-    if record.status != "done" or not path.exists():
+    if not path.exists():
         raise HTTPException(status_code=409, detail="Extraction is not finished")
     return JSONResponse(content=json.loads(path.read_text(encoding="utf-8")))
 
@@ -106,13 +102,53 @@ def get_txt(job_id: str):
     if record is None:
         raise HTTPException(status_code=404, detail="Job not found")
     path = store.result_txt(job_id)
-    if record.status != "done" or not path.exists():
+    if not path.exists():
         raise HTTPException(status_code=409, detail="Extraction is not finished")
     return FileResponse(
         path,
         media_type="text/plain; charset=utf-8",
         filename="extracted.txt",
     )
+
+
+@router.get("/extract/{job_id}/summary")
+def get_summary(job_id: str):
+    record = store.load(job_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    path = store.result_summary_txt(job_id)
+    if not path.exists():
+        raise HTTPException(status_code=409, detail="Summary is not finished")
+    return FileResponse(
+        path,
+        media_type="text/plain; charset=utf-8",
+        filename="summary.txt",
+    )
+
+
+@router.post("/extract/{job_id}/summarize")
+def resummarize_job(job_id: str) -> dict:
+    record = store.load(job_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not store.result_txt(job_id).exists():
+        raise HTTPException(status_code=409, detail="extracted.txt is not ready")
+    from app.pipeline.summarize import run_summarization
+
+    store.update(job_id, status="summarizing", message="Summarizing extracted.txt")
+    try:
+        path = run_summarization(store, job_id)
+        store.update(job_id, status="done", message="Extraction and summary complete")
+        return {"job_id": job_id, "status": "done", "summary_txt": str(path)}
+    except Exception as exc:  # noqa: BLE001
+        warnings = list(record.warnings) + [f"Summary failed: {exc}"]
+        store.update(
+            job_id,
+            status="done",
+            warnings=warnings,
+            message=f"Extraction complete; summary failed: {exc}",
+        )
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.post("/extract/{job_id}/retry")

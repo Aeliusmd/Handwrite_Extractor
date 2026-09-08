@@ -19,7 +19,6 @@ class JobStore:
         (path / "pages").mkdir(exist_ok=True)
         (path / "chunks").mkdir(exist_ok=True)
         (path / "chunk_pdfs").mkdir(exist_ok=True)
-        (path / "vision").mkdir(exist_ok=True)
         return path
 
     def source_pdf(self, job_id: str) -> Path:
@@ -33,6 +32,9 @@ class JobStore:
 
     def result_txt(self, job_id: str) -> Path:
         return self.job_dir(job_id) / "extracted.txt"
+
+    def result_summary_txt(self, job_id: str) -> Path:
+        return self.job_dir(job_id) / "summary.txt"
 
     def page_path(self, job_id: str, page: int) -> Path:
         return self.job_dir(job_id) / "pages" / f"{page:04d}.json"

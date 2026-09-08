@@ -5,6 +5,7 @@ from google.cloud import documentai_v1 as documentai
 
 from app.config import get_settings
 from app.pipeline.digital import clean_whitespace, guess_document_type
+from app.pipeline.google_gate import docai_slot
 from app.pipeline.retry import retry_call
 from app.schemas.page import FormField, Mark, PageExtraction, TableData
 
@@ -141,5 +142,9 @@ def process_chunk_pdf(pdf_path: str, page_numbers: list[int]) -> list[PageExtrac
     )
     if hasattr(request, "imageless_mode"):
         request.imageless_mode = True
-    result = retry_call(lambda: client.process_document(request=request))
+    def _call():
+        with docai_slot():
+            return client.process_document(request=request)
+
+    result = retry_call(_call)
     return document_to_pages(result.document, page_numbers)

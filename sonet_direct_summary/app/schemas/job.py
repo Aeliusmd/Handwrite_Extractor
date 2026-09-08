@@ -8,12 +8,8 @@ from pydantic import BaseModel, Field
 
 JobState = Literal[
     "queued",
-    "classifying",
-    "extracting_digital",
     "chunking",
-    "extracting_scans",
-    "vision_rescue",
-    "normalizing",
+    "summarizing",
     "writing",
     "done",
     "error",

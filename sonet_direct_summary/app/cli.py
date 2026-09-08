@@ -9,12 +9,12 @@ from pathlib import Path
 
 from app.config import get_settings
 from app.pipeline.job_store import JobStore
-from app.pipeline.runner import run_extraction
+from app.pipeline.runner import run_direct_summary
 from app.schemas.job import JobRecord
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Extract a PDF to extracted.txt")
+    parser = argparse.ArgumentParser(description="Summarize a PDF with Claude Sonnet 5 (no extracted.txt)")
     parser.add_argument("pdf", type=Path, help="Path to the PDF")
     parser.add_argument("--user-id", default=None, help="Optional uploader user id")
     parser.add_argument(
@@ -29,11 +29,7 @@ def main() -> None:
 
     settings = get_settings()
     if not settings.credentials_ok:
-        raise SystemExit(
-            "Missing Google credentials. Fill .env (GCP_PROJECT_ID, "
-            "DOCAI_PROCESSOR_ID) and place the service-account JSON at "
-            "GOOGLE_APPLICATION_CREDENTIALS."
-        )
+        raise SystemExit("Missing ANTHROPIC_API_KEY in sonet_direct_summary/.env")
 
     store = JobStore()
     job_id = uuid.uuid4().hex
@@ -51,11 +47,10 @@ def main() -> None:
     print(f"Job {job_id} queued as unprocessed")
     if args.inline or settings.inline_extract:
         print(f"Job {job_id} started inline")
-        run_extraction(job_id)
+        run_direct_summary(job_id)
         record = store.load(job_id)
         if record and record.status == "done":
-            print(f"TXT: {store.result_txt(job_id)}")
-            print(f"JSON: {store.result_json(job_id)}")
+            print(f"SUMMARY: {store.result_summary_txt(job_id)}")
         else:
             raise SystemExit(f"Failed: {record.error if record else 'unknown error'}")
     else:

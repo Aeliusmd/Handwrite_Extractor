@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-import json
 import shutil
 import uuid
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 
 from app.config import get_settings
 from app.db.queue import queue_stats
 from app.pipeline.job_store import JobStore
-from app.pipeline.runner import run_extraction
+from app.pipeline.runner import run_direct_summary
 from app.schemas.job import JobRecord
 
-router = APIRouter(prefix="/v1", tags=["extract"])
+router = APIRouter(prefix="/v1", tags=["summarize"])
 store = JobStore()
 
 
@@ -22,8 +21,8 @@ def _validate_pdf(filename: str | None) -> None:
         raise HTTPException(status_code=400, detail="Upload a PDF file")
 
 
-@router.post("/extract")
-async def start_extract(
+@router.post("/summarize")
+async def start_summarize(
     file: UploadFile = File(...),
     user_id: str | None = Form(default=None),
 ) -> dict:
@@ -32,11 +31,7 @@ async def start_extract(
     if not settings.credentials_ok:
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Google credentials are not configured. Set GCP_PROJECT_ID, "
-                "DOCAI_PROCESSOR_ID, and GOOGLE_APPLICATION_CREDENTIALS in .env, "
-                "and place the service-account JSON in credentials/."
-            ),
+            detail="Anthropic credentials are not configured. Set ANTHROPIC_API_KEY in sonet_direct_summary/.env",
         )
 
     job_id = uuid.uuid4().hex
@@ -69,7 +64,7 @@ async def start_extract(
     )
     store.save(record)
     if settings.inline_extract:
-        run_extraction(job_id)
+        run_direct_summary(job_id)
         record = store.load(job_id) or record
         return {"job_id": job_id, "status": record.status, "user_id": record.user_id, "queued": False}
     return {
@@ -81,7 +76,7 @@ async def start_extract(
     }
 
 
-@router.get("/extract/{job_id}")
+@router.get("/summarize/{job_id}")
 def get_job(job_id: str) -> JobRecord:
     record = store.load(job_id)
     if record is None:
@@ -89,33 +84,22 @@ def get_job(job_id: str) -> JobRecord:
     return record
 
 
-@router.get("/extract/{job_id}/json")
-def get_json(job_id: str):
+@router.get("/summarize/{job_id}/txt")
+def get_summary(job_id: str):
     record = store.load(job_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    path = store.result_json(job_id)
-    if record.status != "done" or not path.exists():
-        raise HTTPException(status_code=409, detail="Extraction is not finished")
-    return JSONResponse(content=json.loads(path.read_text(encoding="utf-8")))
-
-
-@router.get("/extract/{job_id}/txt")
-def get_txt(job_id: str):
-    record = store.load(job_id)
-    if record is None:
-        raise HTTPException(status_code=404, detail="Job not found")
-    path = store.result_txt(job_id)
-    if record.status != "done" or not path.exists():
-        raise HTTPException(status_code=409, detail="Extraction is not finished")
+    path = store.result_summary_txt(job_id)
+    if not path.exists():
+        raise HTTPException(status_code=409, detail="Summary is not finished")
     return FileResponse(
         path,
         media_type="text/plain; charset=utf-8",
-        filename="extracted.txt",
+        filename="summary.txt",
     )
 
 
-@router.post("/extract/{job_id}/retry")
+@router.post("/summarize/{job_id}/retry")
 def retry_job(job_id: str) -> dict:
     settings = get_settings()
     record = store.load(job_id)
@@ -125,7 +109,7 @@ def retry_job(job_id: str) -> dict:
         raise HTTPException(status_code=409, detail="Job is still running")
     store.update(job_id, status="queued", error=None, message="Retry queued")
     if settings.inline_extract:
-        run_extraction(job_id)
+        run_direct_summary(job_id)
     return {"job_id": job_id, "status": "queued", "queued": not settings.inline_extract}
 
 

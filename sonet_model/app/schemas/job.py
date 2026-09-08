@@ -15,6 +15,7 @@ JobState = Literal[
     "vision_rescue",
     "normalizing",
     "writing",
+    "summarizing",
     "done",
     "error",
 ]

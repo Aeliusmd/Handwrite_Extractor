@@ -14,7 +14,7 @@ from app.schemas.job import JobRecord
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Extract a PDF to extracted.txt")
+    parser = argparse.ArgumentParser(description="Extract a PDF with Claude Sonnet 5")
     parser.add_argument("pdf", type=Path, help="Path to the PDF")
     parser.add_argument("--user-id", default=None, help="Optional uploader user id")
     parser.add_argument(
@@ -29,11 +29,7 @@ def main() -> None:
 
     settings = get_settings()
     if not settings.credentials_ok:
-        raise SystemExit(
-            "Missing Google credentials. Fill .env (GCP_PROJECT_ID, "
-            "DOCAI_PROCESSOR_ID) and place the service-account JSON at "
-            "GOOGLE_APPLICATION_CREDENTIALS."
-        )
+        raise SystemExit("Missing ANTHROPIC_API_KEY in sonet_model/.env")
 
     store = JobStore()
     job_id = uuid.uuid4().hex
@@ -56,6 +52,9 @@ def main() -> None:
         if record and record.status == "done":
             print(f"TXT: {store.result_txt(job_id)}")
             print(f"JSON: {store.result_json(job_id)}")
+            summary = store.result_summary_txt(job_id)
+            if summary.exists():
+                print(f"SUMMARY: {summary}")
         else:
             raise SystemExit(f"Failed: {record.error if record else 'unknown error'}")
     else:

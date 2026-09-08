@@ -44,6 +44,18 @@ class Settings(BaseSettings):
     max_upload_mb: int = 500
     data_dir: str = "data/jobs"
 
+    mongodb_uri: str = "mongodb://10.103.0.201:27017/"
+    mongodb_db: str = "handwritten_extractor"
+    mongodb_collection: str = "extractions"
+    mongodb_enabled: bool = True
+
+    inline_extract: bool = False
+    worker_poll_seconds: float = 2.0
+    worker_max_jobs: int = 2
+    worker_stale_minutes: int = 45
+    docai_max_concurrent: int = 8
+    gemini_max_concurrent: int = 4
+
     def apply_prediction_endpoint(self) -> None:
         """Fill project/location/processor from the Document AI prediction URL if given."""
         raw = (self.docai_prediction_endpoint or "").strip()

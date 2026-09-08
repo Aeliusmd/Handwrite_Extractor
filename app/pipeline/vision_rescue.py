@@ -4,6 +4,7 @@ import json
 import re
 
 from app.config import get_settings
+from app.pipeline.google_gate import gemini_slot
 from app.pipeline.retry import retry_call
 from app.schemas.page import FormField, Mark, PageExtraction, Signature
 
@@ -80,17 +81,18 @@ def analyze_page_image(image_bytes: str | bytes, mime_type: str = "image/png") -
         image_bytes = image_bytes.encode("utf-8")
 
     def _call():
-        return client.models.generate_content(
-            model=settings.gemini_model,
-            contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-                VISION_PROMPT,
-            ],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.1,
-            ),
-        )
+        with gemini_slot():
+            return client.models.generate_content(
+                model=settings.gemini_model,
+                contents=[
+                    types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                    VISION_PROMPT,
+                ],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.1,
+                ),
+            )
 
     response = retry_call(_call)
     text = response.text or "{}"
